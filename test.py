@@ -12,7 +12,7 @@ sio.attach(app)
 # we can define aiohttp endpoints just as we normally
 # would with no change
 async def index(request):
-    with open('index.html') as f:
+    with open('template.html') as f:
         return web.Response(text=f.read(), content_type='text/html')
 
 # If we wanted to create a new websocket endpoint,
@@ -25,6 +25,9 @@ async def print_message(sid, message):
     # we print the socket ID and the message
     print("Socket ID: " , sid)
     print(message)
+    # await a successful emit of our reversed message
+    # back to the client
+    await sio.emit('message', message[::-1])
 
 # We bind our aiohttp endpoint to our app
 # router

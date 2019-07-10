@@ -1,19 +1,24 @@
-import os, tweepy
-from flask_socketio import SocketIO, emit
-from flask import Flask, render_template, url_for, copy_current_request_context
-from random import random
+import socketio, os, tweepy
+from aiohttp import web
 from time import sleep
 from threading import Thread, Event
 
-global API_KEY = os.environ['API_KEY']
-global API_SECRET = os.environ['API_SECRET']
+API_KEY = os.environ['API_KEY']
+API_SECRET = os.environ['API_SECRET']
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'secret!'
-app.config['DEBUG'] = True
+# creates a new Async Socket IO Server
+sio = socketio.AsyncServer()
+# Creates a new Aiohttp Web Application
+app = web.Application()
+# Binds our Socket.IO server to our Web App
+# instance
+sio.attach(app)
 
-#turn the flask app into a socketio app
-socketio = SocketIO(app)
+# we can define aiohttp endpoints just as we normally
+# would with no change
+async def index(request):
+    with open('template2.html') as f:
+        return web.Response(text=f.read(), content_type='text/html')
 
 #initialize thread
 thread = Thread()
@@ -21,11 +26,12 @@ thread_stop_event = Event()
 
 
 class FollowerThread(Thread):
-    def __init__(self):
+    def __init__(self, screenname):
+        self.screenname = screenname
         self.delay = 60
         super(FollowerThread, self).__init__()
 
-    def getFollowers(self, screenname):
+    def getFollowers(self):
         """
         Send the results of the non-timing-out tweepy request to a page as they arrive.
         """
@@ -37,23 +43,23 @@ class FollowerThread(Thread):
         auth = tweepy.OAuthHandler(API_KEY, API_SECRET)
         api = tweepy.API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True, compression=True)
        
-        u = api.get_user(screen_name = screenname)
+        u = api.get_user(screen_name = self.screenname)
         num_followers = u.followers_count
         # on_break = #!check tweepy
 
         while not thread_stop_event.isSet():
             all_followers = dict()
             i = 0
-            for follower in tweepy.Cursor(api.followers, screen_name=screenname).items():
-                got_follower = {"query_screenname":screenname,"id":follower.id_str, "screen_name":follower.screen_name, \
-                    "location":follower.location,"num_followers":follower.followers_count, "num_status":follower.statuses_count\
+            for follower in tweepy.Cursor(api.followers, screen_name=self.screenname).items():
+                got_follower = {"query_screenname":self.screenname,"id":follower.id_str, "screen_name":follower.screen_name, \
+                    "location":follower.location,"num_followers":follower.followers_count, "num_status":follower.statuses_count,\
                         "is_verified":follower.verified, "image":follower.profile_image_url}
                 all_followers[got_follower["id"]] = got_follower
                 i+=1
 
                 print(got_follower)
 
-            socketio.emit('all_followers', all_followers, namespace='/test')
+            sio.emit('followers', all_followers)
             sleep(self.delay)
 
             if i >= num_followers: thread_stop_event.set()
@@ -62,13 +68,9 @@ class FollowerThread(Thread):
         self.getFollowers()
 
 
-@app.route('/')
-def index():
-    #only by sending this page first will the client be connected to the socketio instance
-    return render_template('index.html')
-
-@socketio.on('connect', namespace='/test')
-def test_connect():
+@sio.on('connect')
+def test_connect(socket_name, socket_headers):
+    print(socket_name)#, socket_headers)
     # need visibility of the global thread object
     global thread
     print('Client connected')
@@ -76,13 +78,13 @@ def test_connect():
     #Start the random number generator thread only if the thread has not been started before.
     if not thread.isAlive():
         print("Starting Thread")
-        thread = FollowerThread()
+        thread = FollowerThread('contrapoints')
         thread.start()
 
-@socketio.on('disconnect', namespace='/test')
-def test_disconnect():
-    print('Client disconnected')
+# We bind our aiohttp endpoint to our app
+# router
+app.router.add_get('/', index)
 
-
+# We kick off our server
 if __name__ == '__main__':
-    socketio.run(app)
+    web.run_app(app)
