@@ -2,9 +2,13 @@ import socketio, os, tweepy
 from aiohttp import web
 from time import sleep
 from threading import Thread, Event
+from tweepy import RateLimitError
+from datetime import datetime as dt
 
 API_KEY = os.environ['API_KEY']
 API_SECRET = os.environ['API_SECRET']
+API_ACCESS_TOKEN = os.environ['API_ACCESS_TOKEN']
+API_ACCESS_TOKEN_SECRET = os.environ['API_ACCESS_TOKEN_SECRET']
 
 # creates a new Async Socket IO Server
 sio = socketio.AsyncServer()
@@ -28,8 +32,17 @@ thread_stop_event = Event()
 class FollowerThread(Thread):
     def __init__(self, screenname):
         self.screenname = screenname
-        self.delay = 60
+        # self.delay = 60
         super(FollowerThread, self).__init__()
+
+    def dispCountdown(self, timer_start):
+        t = timer_start
+        while t>=0:
+            mins, secs = divmod(t, 60)
+            timeformat = '{:02n}:{:02n}'.format(mins, secs)
+            print(timeformat, end='\r')
+            sleep(1)
+            t -= 1
 
     def getFollowers(self):
         """
@@ -38,31 +51,37 @@ class FollowerThread(Thread):
 
         print("Let's heckin do this.")
 
-        global API_KEY, API_SECRET
+        global API_KEY, API_SECRET, API_ACCESS_TOKEN, API_ACCESS_TOKEN_SECRET
 
         auth = tweepy.OAuthHandler(API_KEY, API_SECRET)
-        api = tweepy.API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True, compression=True)
+        auth.set_access_token(API_ACCESS_TOKEN, API_ACCESS_TOKEN_SECRET)
+        api = tweepy.API(auth, wait_on_rate_limit=False, wait_on_rate_limit_notify=True, compression=True)
        
         u = api.get_user(screen_name = self.screenname)
         num_followers = u.followers_count
-        # on_break = #!check tweepy
 
         while not thread_stop_event.isSet():
             all_followers = dict()
             i = 0
-            for follower in tweepy.Cursor(api.followers, screen_name=self.screenname).items():
-                got_follower = {"query_screenname":self.screenname,"id":follower.id_str, "screen_name":follower.screen_name, \
-                    "location":follower.location,"num_followers":follower.followers_count, "num_status":follower.statuses_count,\
-                        "is_verified":follower.verified, "image":follower.profile_image_url}
-                all_followers[got_follower["id"]] = got_follower
-                i+=1
+            try:
+                for follower in tweepy.Cursor(api.followers, screen_name=self.screenname).items():
+                    got_follower = {"query_screenname":self.screenname,"id":follower.id_str, "screen_name":follower.screen_name, \
+                        "location":follower.location,"num_followers":follower.followers_count, "num_status":follower.statuses_count,\
+                            "is_verified":follower.verified, "image":follower.profile_image_url}
+                    all_followers[got_follower["id"]] = got_follower
+                    i+=1
 
-                print(got_follower)
+                    # print(got_follower)
+            except RateLimitError:
+                print(f"Grabbed {len(all_followers)} followers. Waiting for timeout...")
+                sio.emit('followers', all_followers)
+                timeout_ends = dt.fromtimestamp(api.rate_limit_status()['resources']['followers']['/followers/list']['reset'])
+                time_left = (timeout_ends - dt.now()).total_seconds()
+                self.dispCountdown(time_left)
 
-            sio.emit('followers', all_followers)
-            sleep(self.delay)
+                if i >= num_followers: thread_stop_event.set()
+                else: continue
 
-            if i >= num_followers: thread_stop_event.set()
 
     def run(self):
         self.getFollowers()
@@ -75,7 +94,6 @@ def test_connect(socket_name, socket_headers):
     global thread
     print('Client connected')
 
-    #Start the random number generator thread only if the thread has not been started before.
     if not thread.isAlive():
         print("Starting Thread")
         thread = FollowerThread('contrapoints')
@@ -87,4 +105,5 @@ app.router.add_get('/', index)
 
 # We kick off our server
 if __name__ == '__main__':
+    sio.connect('http://localhost:8080')
     web.run_app(app)
