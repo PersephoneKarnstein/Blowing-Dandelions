@@ -1,9 +1,11 @@
-import socketio, os, tweepy
+import socketio, os, tweepy, warnings
 from aiohttp import web
 from time import sleep
 from threading import Thread, Event
 from tweepy import RateLimitError
 from datetime import datetime as dt
+
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 API_KEY = os.environ['API_KEY']
 API_SECRET = os.environ['API_SECRET']
@@ -39,7 +41,7 @@ class FollowerThread(Thread):
         t = timer_start
         while t>=0:
             mins, secs = divmod(t, 60)
-            timeformat = '{:02n}:{:02n}'.format(mins, secs)
+            timeformat = '{:02.0f}:{:02.0f} - [{: <30s}]'.format(mins, secs, '|'*int(30*t/timer_start))
             print(timeformat, end='\r')
             sleep(1)
             t -= 1
@@ -60,9 +62,9 @@ class FollowerThread(Thread):
         u = api.get_user(screen_name = self.screenname)
         num_followers = u.followers_count
 
+        all_followers = dict()
+        i = 0
         while not thread_stop_event.isSet():
-            all_followers = dict()
-            i = 0
             try:
                 for follower in tweepy.Cursor(api.followers, screen_name=self.screenname).items():
                     got_follower = {"query_screenname":self.screenname,"id":follower.id_str, "screen_name":follower.screen_name, \
@@ -90,7 +92,8 @@ class FollowerThread(Thread):
 @sio.on('connect')
 def test_connect(socket_name, socket_headers):
     print(socket_name)#, socket_headers)
-    # need visibility of the global thread object
+    # # need visibility of the global thread object
+    sio.send("hi")
     global thread
     print('Client connected')
 
@@ -105,5 +108,5 @@ app.router.add_get('/', index)
 
 # We kick off our server
 if __name__ == '__main__':
-    sio.connect('http://localhost:8080')
+    # sio.connect('http://localhost:8080')
     web.run_app(app)
