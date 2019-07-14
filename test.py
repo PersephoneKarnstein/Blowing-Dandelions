@@ -1,38 +1,30 @@
 from aiohttp import web
 import socketio
 
-# creates a new Async Socket IO Server
 sio = socketio.AsyncServer()
-# Creates a new Aiohttp Web Application
 app = web.Application()
-# Binds our Socket.IO server to our Web App
-# instance
 sio.attach(app)
 
-# we can define aiohttp endpoints just as we normally
-# would with no change
 async def index(request):
+    """Serve the client-side application."""
     with open('template.html') as f:
         return web.Response(text=f.read(), content_type='text/html')
 
-# If we wanted to create a new websocket endpoint,
-# use this decorator, passing in the name of the
-# event we wish to listen out for
-@sio.on('message')
-async def print_message(sid, message):
-    # When we receive a new event of type
-    # 'message' through a socket.io connection
-    # we print the socket ID and the message
-    print("Socket ID: " , sid)
-    print(message)
-    # await a successful emit of our reversed message
-    # back to the client
-    await sio.emit('message', message[::-1])
+@sio.event
+def connect(sid, environ):
+    print("connect ", sid)
 
-# We bind our aiohttp endpoint to our app
-# router
+@sio.event
+async def chat_message(sid, data):
+    print("message ", data)
+    await sio.emit('reply', room=sid)
+
+@sio.event
+def disconnect(sid):
+    print('disconnect ', sid)
+
+# app.router.add_static('/static', 'static')
 app.router.add_get('/', index)
 
-# We kick off our server
 if __name__ == '__main__':
     web.run_app(app)
