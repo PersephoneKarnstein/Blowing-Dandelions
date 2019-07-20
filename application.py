@@ -91,23 +91,23 @@ class RandomThread(Thread):
 
 class senderThread(Thread):
     def __init__(self):
-        self.delay = 1
+        self.delay = 1.5
         super(senderThread, self).__init__()
 
     def randomNumberGenerator(self):
         """
-        Generate a random number every 1 second and emit to a socketio instance (broadcast)
+        Generate a random number every 1.5 second and emit to a socketio instance (broadcast)
         Ideally to be run in a separate thread?
         """
 
         global QUEUE
         #infinite loop of magical random numbers
-        print("Making random numbers")
+        # print("Making random numbers")
         while not thread_stop_event.isSet():
             if len(QUEUE) > 0:
                 follower = QUEUE.pop()
-                print(follower)
-                socketio.emit('newnumber', {'number': follower}, namespace='/test')
+                print(f"\n\nDequeued follower:\n{follower}\nNum left in queue:{len(QUEUE)}")
+                socketio.emit('newfollower', {'follower': follower}, namespace='/test')
             else: pass
             sleep(self.delay)
 
