@@ -1,53 +1,101 @@
 var followers_received = [];
+var friends_received = [];
+// var G = new jsnx.DiGraph();
 
+$.holdReady(true);
+$.getScript("static/jsnetworkx/jsnetworkx.js", function() {
+    window.G = new jsnx.DiGraph();
+    $.holdReady(false);
+});
 
 $(document).ready(function() {
     //connect to the socket server.
+    // var G = new jsnx.DiGraph();
     var socket = io.connect('http://' + document.domain + ':' + location.port + '/test');
 
-
     socket.on('connect', () => {
-            var G = new jsnx.DiGraph();
-        })
+        console.log("Connected to server.")
+        // var G = new jsnx.DiGraph();
+        G.addNode("contrapoints", {
+            "num_followers":1,
+            "num_status":1
+            });
+
+        jsnx.draw(G, {
+            element: '#canvas',
+            withLabels: true,
+            layoutAttr: {
+                charge: -320,
+            },
+            nodeStyle: {
+                fill: function(d) {
+                    return d3.interpolateSpectral(2/Math.log10(d.data.num_status));
+                }
+            },
+            labelStyle: {
+                fill: 'black'
+            },
+            nodeAttr: {
+                r: function(d) {
+                    console.log(".")
+                    console.log(d)
+                    console.log(d.data)
+                    console.log(d.data.screen_name)
+                    console.log(d.data.num_followers)
+                    console.log(2*Math.log(d.data.num_followers))
+                    return 2*Math.log(d.data.num_followers);
+                }
+            },
+            //     title: function(d) { return d.label;}
+            // },
+    
+            // stickyDrag: true
+        }, true);
+    })
+
         //receive details from server
+    socket.on('newfriend', function(msg) {
+        console.log("Received friend" + msg.friend_id);
+        friends_received.push(msg.friend_id);
+    })
+
     socket.on('newfollower', function(msg) {
         console.log("Received follower" + msg.follower.screen_name);
-        //maintain a list of ten numbers
-        // if (followers_received.length >= 10) {
-        //     followers_received.shift()
-        // }
-        followers_received.push(msg.follower);
-        PlotFollowers(G)
-            // followers_string = '';
-            // for (var i = 0; i < followers_received.length; i++) {
-            //     followers_string = followers_string + '<p>' + followers_received[i].toString() + '</p>';
-            // }
-            // $('#log').html(followers_string);
-    });
+        if (
+            (typeof msg.follower.screen_name != "undefined")||
+        (typeof msg.follower.num_followers != "undefined")||
+        !isNaN(msg.follower.num_followers)
+            ) {
+            followers_received.push(msg.follower);
+            AddFollowers(window.G)
+        }
+    })
 
 });
 
-function PlotFollowers() {
-    var G = new jsnx.DiGraph();
+function AddFollowers(G) {
+    // var G = new jsnx.DiGraph();
 
-    G.addNode("Contrapoints")
+    // G.addNode("Contrapoints")
     for (var i = 0; i < followers_received.length; i++) {
-        G.addNode(followers_received[i]);
-        G.addEdge(followers_received[i]["query_screenname"], followers_received[i]["screen_name"]);
-        // followers_string = followers_string + '<p>' + followers_received[i].toString() + '</p>';
-    }
-
-    jsnx.draw(G, {
-        element: '#canvas',
-        withLabels: true,
-        nodeStyle: {
-            fill: function(d) {
-                return d.data.color;
-            }
-        },
-        labelStyle: {
-            fill: 'white'
-        },
-        stickyDrag: true
-    });
-}
+        if (!G.nodes().includes(followers_received[i])) {
+            if (
+                (typeof followers_received[i]["screen_name"] != "undefined")||
+                (typeof followers_received[i]["num_followers"] != "undefined")||
+                !isNaN(followers_received[i]["num_followers"])||(followers_received[i]["screen_name"]==="contrapoints")
+                ) {
+                    G.addNode(followers_received[i]["screen_name"], {
+                        "query_screenname":followers_received[i]["query_screenname"],
+                        "id":followers_received[i]["id"],
+                        "screen_name":followers_received[i]["screen_name"],
+                        "location":followers_received[i]["location"],
+                        "num_followers":followers_received[i]["num_followers"],
+                        "num_status":followers_received[i]["num_status"],
+                        "is_verified":followers_received[i]["is_verified"],
+                        "image":followers_received[i]["image"]
+                        });
+                    G.addEdge(followers_received[i]["screen_name"], followers_received[i]["query_screenname"]);
+            };
+        };
+    };
+};
