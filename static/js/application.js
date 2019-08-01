@@ -82,7 +82,7 @@ function AddFollowers(G) {
             if (
                 (typeof followers_received[i]["screen_name"] != "undefined")||
                 (typeof followers_received[i]["num_followers"] != "undefined")||
-                !isNaN(followers_received[i]["num_followers"])||(followers_received[i]["screen_name"]==="contrapoints")
+                !isNaN(followers_received[i]["num_followers"])
                 ) {
                     G.addNode(followers_received[i]["screen_name"], {
                         "query_screenname":followers_received[i]["query_screenname"],
