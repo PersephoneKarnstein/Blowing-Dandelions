@@ -1,30 +1,14 @@
-"""
-Demo Flask application to test the operation of Flask with socket.io
+#####################################################
+####################### CONFIG ######################
+#####################################################
 
-Aim is to create a webpage that is constantly updated with random numbers from a background python process.
-
-30th May 2014
-
-===================
-
-Updated 13th April 2018
-
-+ Upgraded code to Python 3
-+ Used Python3 SocketIO implementation
-+ Updated CDN Javascript and CSS sources
-
-"""
-
-# Start with a basic flask app webpage.
 from flask_socketio import SocketIO, emit
 from flask import Flask, render_template, url_for, copy_current_request_context
 from random import random
 from time import sleep
 from threading import Thread, Event
 from collections import deque
-
 import os, tweepy
-
 
 API_KEY = os.environ['API_KEY']
 API_SECRET = os.environ['API_SECRET']
@@ -35,33 +19,45 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 app.config['DEBUG'] = True
 
-#turn the flask app into a socketio app
-socketio = SocketIO(app)
-
-#Get followers of target account
-thread1 = Thread()
-thread1_stop_event = Event()
-
-#Get 'friends' - i.e. people you follow
-thread2 = Thread()
-thread2_stop_event = Event()
-
-#Send follower data to frontend
-thread3 = Thread()
-thread3_stop_event = Event()
-
-#Send friend data to frontend
-thread4 = Thread()
-thread4_stop_event = Event()
-
-#initialize a queue to add things into
-QUEUE = deque()
-FRIEND_QUEUE = deque()
-
 auth = tweepy.OAuthHandler(API_KEY, API_SECRET)
 auth.set_access_token(API_ACCESS_TOKEN, API_ACCESS_TOKEN_SECRET)
 api = tweepy.API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True, compression=True)
 
+
+target_user = 'contrapoints' #! change to actual target user
+
+#####################################################
+################## THREADING SET-UP #################
+#####################################################
+
+#turn the flask app into a socketio app
+socketio = SocketIO(app)
+
+#Get followers of target account
+follower_thread = Thread()
+follower_thread_stop_event = Event()
+
+#Get 'friends' - i.e. people you follow
+friend_thread = Thread()
+friend_thread_stop_event = Event()
+
+#Send follower data to frontend
+follower_send_thread = Thread()
+follower_send_thread_stop_event = Event()
+
+#Send friend data to frontend
+friend_send_thread = Thread()
+friend_send_thread_stop_event = Event()
+
+#initialize a queue to add things into
+FOLLOWER_QUEUE = deque()
+FRIEND_QUEUE = deque()
+USER_DATA = {"username":target_user}
+
+
+#####################################################
+################# THREAD DEFINITIONS ################
+#####################################################
 
 class FollowerThread(Thread):
     def __init__(self, screenname):
@@ -71,22 +67,23 @@ class FollowerThread(Thread):
 
     def GetFollowers(self):
         """
-        Send the results of the non-timing-out tweepy request to a page as they arrive.
+        Because the Twitter API will time out very quickly for targets with large
+        followings but can be configured to just wait out the rate limit rather
+        than throwing an error, we here capture the follower data as it is received
+        and add it to a queue that can be pulled from to send to the frontend.
         """
 
-        print("Let's heckin do this.")
+        # print("Let's heckin do this.")
 
-        global auth, api, QUEUE
-
-        # auth = tweepy.OAuthHandler(API_KEY, API_SECRET)
-        # api = tweepy.API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True, compression=True)
+        global auth, api, FOLLOWER_QUEUE, USER_DATA
        
         u = api.get_user(screen_name = self.screenname)
         num_followers = u.followers_count
+        USER_DATA["num_followers"] = num_followers
         all_followers = dict()
         i = 0
 
-        while not thread1_stop_event.isSet():
+        while not follower_thread_stop_event.isSet():
             for follower in tweepy.Cursor(api.followers, screen_name=self.screenname).items():
                 got_follower = {"query_screenname":self.screenname,"id":follower.id_str, "screen_name":follower.screen_name, \
                     "location":follower.location,"num_followers":follower.followers_count, "num_status":follower.statuses_count,\
@@ -94,10 +91,10 @@ class FollowerThread(Thread):
                 all_followers[got_follower["id"]] = got_follower
                 i+=1
 
-                QUEUE.appendleft(got_follower) #! enqueue followers in this thread; dequeue in a seperate thread
-                print(f"i={i}\nqueue length={len(QUEUE)}\n{got_follower}\n\n")
+                FOLLOWER_QUEUE.appendleft(got_follower) #! enqueue followers in this thread; dequeue in a seperate thread
+                print(f"i={i}\nqueue length={len(FOLLOWER_QUEUE)}\n{got_follower}\n\n")
 
-            if i >= num_followers: thread1_stop_event.set()
+            if i >= num_followers: follower_thread_stop_event.set()
 
     def run(self):
         self.GetFollowers()
@@ -110,19 +107,21 @@ class FriendThread(Thread):
 
     def GetFriends(self):
         """
-        Send the results of the non-timing-out tweepy request to a page as they arrive.
+        Because the Twitter API will time out very quickly for targets with large
+        'friend' groups but can be configured to just wait out the rate limit rather
+        than throwing an error, we here capture the friend data as it is received
+        and add it to a queue that can be pulled from to send to the frontend.
         """
 
-        print("Let's heckin do this.")
-
-        global auth, api, FRIEND_QUEUE
+        global auth, api, FRIEND_QUEUE, USER_DATA
        
         u = api.me()
         num_friends = u.friends_count
+        USER_DATA["num_friends"] = num_friends
         all_friends = []
         j = 0
 
-        while not thread1_stop_event.isSet():
+        while not follower_thread_stop_event.isSet():
             for friend in tweepy.Cursor(api.friends, id=u.id_str).items():
                 # got_follower = {"query_screenname":self.screenname,"id":follower.id_str, "screen_name":follower.screen_name, \
                 #     "location":follower.location,"num_followers":follower.followers_count, "num_status":follower.statuses_count,\
@@ -133,7 +132,7 @@ class FriendThread(Thread):
                 FRIEND_QUEUE.appendleft(friend.id_str) #! enqueue followers in this thread; dequeue in a seperate thread
                 print(f"j={j}\nfriend queue length={len(FRIEND_QUEUE)}\n{friend.screen_name}\n\n")
 
-            if j >= num_friends: thread3_stop_event.set()
+            if j >= num_friends: follower_send_thread_stop_event.set()
 
     def run(self):
         self.GetFriends()
@@ -145,17 +144,16 @@ class SenderThread_Follower(Thread):
 
     def SendData(self):
         """
-        Generate a random number every 1.5 second and emit to a socketio instance (broadcast)
-        Ideally to be run in a separate thread?
+        Pull from the queue of followers and send them to the frontend.
         """
 
-        global QUEUE
+        global FOLLOWER_QUEUE
         #infinite loop of magical random numbers
         # print("Making random numbers")
-        while not thread1_stop_event.isSet():
-            if len(QUEUE) > 0:
-                follower = QUEUE.pop()
-                print(f"\n\nDequeued follower:\n{follower}\nNum left in queue:{len(QUEUE)}")
+        while not follower_thread_stop_event.isSet():
+            if len(FOLLOWER_QUEUE) > 0:
+                follower = FOLLOWER_QUEUE.pop()
+                print(f"\n\nDequeued follower:\n{follower}\nNum left in queue:{len(FOLLOWER_QUEUE)}")
                 socketio.emit('newfollower', {'follower': follower}, namespace='/test')
             else: pass
             sleep(self.delay)
@@ -170,14 +168,12 @@ class SenderThread_Friend(Thread):
 
     def SendData(self):
         """
-        Generate a random number every 1.5 second and emit to a socketio instance (broadcast)
-        Ideally to be run in a separate thread?
+        Pull from the queue of friends and send them to the frontend.
         """
 
         global FRIEND_QUEUE
-        #infinite loop of magical random numbers
-        # print("Making random numbers")
-        while not thread2_stop_event.isSet():
+
+        while not friend_thread_stop_event.isSet():
             if len(FRIEND_QUEUE) > 0:
                 friend = FRIEND_QUEUE.pop()
                 print(f"\n\nDequeued friend id:\n{friend}\nNum left in queue:{len(FRIEND_QUEUE)}")
@@ -188,40 +184,59 @@ class SenderThread_Friend(Thread):
     def run(self):
         self.SendData()
 
+
+#####################################################
+#################### PAGE ROUTES ####################
+#####################################################
+
 @app.route('/')
 def index():
-    #only by sending this page first will the client be connected to the socketio instance
+    """Render the main page of the app."""
+
     return render_template('index.html')
+
 
 @socketio.on('connect', namespace='/test')
 def test_connect():
+    """Code to be run when the browser connects to the web socket
+    (in this case, when the user navigates to the main page.)"""
+
     # need visibility of the global thread object
-    global thread1, thread2, thread3, thread4
+    global follower_thread, friend_thread, follower_send_thread, friend_send_thread
     print('Client connected')
 
     #Start the random number generator thread only if the thread has not been started before.
-    if not thread1.isAlive():
-        print("Starting Thread 1")
-        thread1 = FollowerThread("contrapoints")
-        thread1.start()
+    if not follower_thread.isAlive():
+        print("Reading followers...")
+        follower_thread = FollowerThread(target_user)
+        follower_thread.start()
 
-    if not thread2.isAlive():
-        print("Starting Thread 2")
-        thread2 = FriendThread()
-        thread2.start()
+    if not friend_thread.isAlive():
+        print("Reading friends...")
+        friend_thread = FriendThread()
+        friend_thread.start()
 
-    if not thread3.isAlive():
-        print("Starting Thread 3")
-        thread3 = SenderThread_Follower()
-        thread3.start()
+    if not follower_send_thread.isAlive():
+        print("Sending followers to page...")
+        follower_send_thread = SenderThread_Follower()
+        follower_send_thread.start()
 
-    if not thread4.isAlive():
-        print("Starting Thread 4")
-        thread4 = SenderThread_Friend()
-        thread4.start()
+    if not friend_send_thread.isAlive():
+        print("Sending friends to page")
+        friend_send_thread = SenderThread_Friend()
+        friend_send_thread.start()
+
+    while True:
+        if list(USER_DATA.keys()) == ["username","num_followers","num_friends"]:
+            socketio.emit('userdata', {'userdata': USER_DATA}, namespace='/test')
+            break
+        else: 
+            sleep(1)
+            continue
 
 @socketio.on('disconnect', namespace='/test')
 def test_disconnect():
+    """Code to be run when the browser disconnects from the web socket."""
     print('Client disconnected')
 
 

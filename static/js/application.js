@@ -55,12 +55,18 @@ $(document).ready(function() {
 
         //receive details from server
     socket.on('newfriend', function(msg) {
-        console.log("Received friend" + msg.friend_id);
+        console.log("Received friend " + msg.friend_id);
         friends_received.push(msg.friend_id);
     })
 
+    socket.on('userdata', function(msg) {
+        console.log("Updated target user info.");
+        window.G.node.get("contrapoints").num_followers = msg.userdata.num_followers
+        window.G.node.get("contrapoints").num_friends = msg.userdata.num_friends
+    })
+
     socket.on('newfollower', function(msg) {
-        console.log("Received follower" + msg.follower.screen_name);
+        console.log("Received follower " + msg.follower.screen_name);
         if (
             (typeof msg.follower.screen_name != "undefined")||
         (typeof msg.follower.num_followers != "undefined")||
