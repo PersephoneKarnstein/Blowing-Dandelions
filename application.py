@@ -214,10 +214,10 @@ class SenderThread_Friend(Thread):
                 socketio.emit('newfollower', {'follower_id': follower}, namespace='/test')
                 self.last_sent_data = dt.now()
 
-            elif (dt.now() - self.last_sent_data).seconds >= 2*15*60: #i.e., we've gone two timeout periods 
+            elif (dt.now() - self.last_sent_data).seconds <= 2*15*60: #i.e., we've gone two timeout periods 
                                                                         #without sending any new data to the frontend.
                 sleep(self.delay)
-                continue
+                # continue
             else: 
                 break
 

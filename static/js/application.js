@@ -23,7 +23,9 @@ socket.on('connect', () => {
     // var G = new jsnx.DiGraph();
     G.addNode("contrapoints", {
         "num_followers":9999,
-        "num_status":1
+        "num_status":1,
+        "image":"http://pbs.twimg.com/profile_images/1146860549306818560/snzS8Jhe_normal.png",
+        "id":9999
         });
 
     $("svg").attr({'height':'50em'})
@@ -33,25 +35,30 @@ socket.on('connect', () => {
         withLabels: true,
         layoutAttr: {
             charge: -320,
-            linkDistance: 100 //! should be able to use this to describe how 
-            // many times they have retweeted the person or something
+            // linkDistance: function(d) {
+            //     return 100/(Math.log(d.data.num_followers + 1)*Math.log10(d.data.num_status + 1)) 
+                //! should be able to use this to describe how many times they have retweeted 
+                // the person or something
+            // }
         },
-        nodeStyle: {
-            fill: function(d) {
-                return d3.interpolateSpectral(2/Math.log10(d.data.num_status));
-            }
-        },
+        // nodeStyle: {
+        //     fill: function(d) {
+        //         // return d3.interpolateSpectral(2/Math.log10(d.data.num_status));
+        //         return "url("+d.data.image+")"
+        //     }
+        // },
         labelStyle: {
             fill: 'black'
         },
-        nodeAttr: {
+
+        node_shape: "image",
+        node_attr: {
             r: function(d) {
-                if (d.data.num_followers==0) {
-                    return 0
-                }
-                else {
-                return 2*Math.log(d.data.num_followers);
-            }}
+                return 2*Math.log(d.data.num_followers+1);
+                },
+            id: function(d) {
+                return "node-"+d.data.id
+            }
         },
         //     title: function(d) { return d.label;}
         // },
@@ -62,12 +69,12 @@ socket.on('connect', () => {
 
         //receive details from server
     socket.on('newfriend', function(msg) {
-        console.log("Received friend " + msg.friend_id);
+        console.log("Received friend of me " + msg.friend_id);
         my_friends_received.add(msg.friend_id);
     })
 
     socket.on('newfollower', function(msg) {
-        console.log("Received follower " + msg.follower_id);
+        console.log("Received follower of me " + msg.follower_id);
         my_followers_received.add(msg.follower_id);
     })
 
@@ -83,6 +90,7 @@ socket.on('connect', () => {
         window.G.node.get("contrapoints").num_followers = msg.targetdata.num_followers
         window.G.node.get("contrapoints").num_status = msg.targetdata.num_status
         window.G.node.get("contrapoints").image = msg.targetdata.image
+        window.G.node.get("contrapoints").id = "node-9999"
     })
 
     socket.on('newfollower', function(msg) {
@@ -120,6 +128,7 @@ function AddFollowers(G) {
                         "image":followers_received[i]["image"]
                         });
                     G.addEdge(followers_received[i]["screen_name"], followers_received[i]["query_screenname"]);
+
             };
         };
     };
