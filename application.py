@@ -79,7 +79,9 @@ class FollowerThread(Thread):
        
         u = api.get_user(screen_name = self.screenname)
         num_followers = u.followers_count
+        num_status = u.statuses_count
         USER_DATA["num_followers"] = num_followers
+        USER_DATA["num_status"] = num_status
         all_followers = dict()
         i = 0
 
@@ -117,7 +119,7 @@ class FriendThread(Thread):
        
         u = api.me()
         num_friends = u.friends_count
-        USER_DATA["num_friends"] = num_friends
+        # USER_DATA["num_friends"] = num_friends
         all_friends = []
         j = 0
 
@@ -227,7 +229,7 @@ def test_connect():
         friend_send_thread.start()
 
     while True:
-        if list(USER_DATA.keys()) == ["username","num_followers","num_friends"]:
+        if list(USER_DATA.keys()) == ["username","num_followers","num_status"]:
             socketio.emit('userdata', {'userdata': USER_DATA}, namespace='/test')
             break
         else: 

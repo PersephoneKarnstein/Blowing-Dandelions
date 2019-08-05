@@ -17,10 +17,12 @@ $(document).ready(function() {
         console.log("Connected to server.")
         // var G = new jsnx.DiGraph();
         G.addNode("contrapoints", {
-            "num_followers":1,
+            "num_followers":9999,
             "num_status":1
             });
 
+        $("svg").attr({'height':'50em'})
+        
         jsnx.draw(G, {
             element: '#canvas',
             withLabels: true,
@@ -37,12 +39,12 @@ $(document).ready(function() {
             },
             nodeAttr: {
                 r: function(d) {
-                    console.log(".")
-                    console.log(d)
-                    console.log(d.data)
-                    console.log(d.data.screen_name)
-                    console.log(d.data.num_followers)
-                    console.log(2*Math.log(d.data.num_followers))
+                    // console.log("........")
+                    // console.log(d)
+                    // // console.log(d.data)
+                    // console.log(d.data.screen_name)
+                    // console.log(d.data.num_followers)
+                    // console.log(d.data.num_status)
                     return 2*Math.log(d.data.num_followers);
                 }
             },
@@ -62,7 +64,7 @@ $(document).ready(function() {
     socket.on('userdata', function(msg) {
         console.log("Updated target user info.");
         window.G.node.get("contrapoints").num_followers = msg.userdata.num_followers
-        window.G.node.get("contrapoints").num_friends = msg.userdata.num_friends
+        window.G.node.get("contrapoints").num_status = msg.userdata.num_status
     })
 
     socket.on('newfollower', function(msg) {
@@ -80,14 +82,11 @@ $(document).ready(function() {
 });
 
 function AddFollowers(G) {
-    // var G = new jsnx.DiGraph();
-
-    // G.addNode("Contrapoints")
     for (var i = 0; i < followers_received.length; i++) {
         if (!G.nodes().includes(followers_received[i])) {
             if (
-                (typeof followers_received[i]["screen_name"] != "undefined")||
-                (typeof followers_received[i]["num_followers"] != "undefined")||
+                (typeof followers_received[i]["screen_name"] != "undefined")&&
+                (typeof followers_received[i]["num_followers"] != "undefined")&&
                 !isNaN(followers_received[i]["num_followers"])
                 ) {
                     G.addNode(followers_received[i]["screen_name"], {
