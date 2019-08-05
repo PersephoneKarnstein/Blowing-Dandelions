@@ -129,6 +129,7 @@ class FriendThread(Thread):
         ME_DATA["num_friends"] = num_friends
         ME_DATA["num_followers"] = num_followers
         got_friends = 0
+        got_followers = 0
 
         while True:#not follower_thread_stop_event.isSet():
             for friend in tweepy.Cursor(api.friends, id=u.id_str).items():
@@ -207,7 +208,7 @@ class SenderThread_Friend(Thread):
                 socketio.emit('newfriend', {'friend_id': friend}, namespace='/test')
                 self.last_sent_data = dt.now()
 
-            elif: len(MY_FOLLOWER_QUEUE) > 0:
+            elif len(MY_FOLLOWER_QUEUE) > 0:
                 follower = MY_FOLLOWER_QUEUE.pop()
                 print(f"\n\nDequeued follower id:\n{follower}\nNum left in queue:{len(MY_FOLLOWER_QUEUE)}")
                 socketio.emit('newfollower', {'follower_id': follower}, namespace='/test')
@@ -263,21 +264,21 @@ def test_connect():
         follower_send_thread.start()
 
     if not friend_send_thread.isAlive():
-        print("Sending friends to page")
+        # print("Sending friends to page...")
         friend_send_thread = SenderThread_Friend()
         friend_send_thread.start()
 
-    while True:
-        if list(ME_DATA.keys()) == ["username","num_friends"]:
-            socketio.emit('meData', {'meData': ME_DATA}, namespace='/test')
-            break
-        else: 
-            sleep(1)
-            continue
+    # while True:
+    #     if list(ME_DATA.keys()) == ["username","num_friends"]:
+    #         socketio.emit('meData', {'meData': ME_DATA}, namespace='/test')
+    #         break
+    #     else: 
+    #         sleep(1)
+    #         continue
 
     while True:
         if list(TARGET_DATA.keys()) == ["username","num_followers","num_status", "image"]:
-            socketio.emit('userdata', {'userdata': TARGET_DATA}, namespace='/test')
+            socketio.emit('targetdata', {'targetdata': TARGET_DATA}, namespace='/test')
             break
         else: 
             sleep(1)

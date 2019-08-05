@@ -18,47 +18,47 @@ $(document).ready(function() {
     // var G = new jsnx.DiGraph();
     var socket = io.connect('http://' + document.domain + ':' + location.port + '/test');
 
-    socket.on('connect', () => {
-        console.log("Connected to server.")
-        // var G = new jsnx.DiGraph();
-        G.addNode("contrapoints", {
-            "num_followers":9999,
-            "num_status":1
-            });
+socket.on('connect', () => {
+    console.log("Connected to server.")
+    // var G = new jsnx.DiGraph();
+    G.addNode("contrapoints", {
+        "num_followers":9999,
+        "num_status":1
+        });
 
-        $("svg").attr({'height':'50em'})
+    $("svg").attr({'height':'50em'})
 
-        jsnx.draw(G, {
-            element: '#canvas',
-            withLabels: true,
-            layoutAttr: {
-                charge: -320,
-                linkDistance: 100 //! should be able to use this to describe how 
-                // many times they have retweeted the person or something
-            },
-            nodeStyle: {
-                fill: function(d) {
-                    return d3.interpolateSpectral(2/Math.log10(d.data.num_status));
+    jsnx.draw(G, {
+        element: '#canvas',
+        withLabels: true,
+        layoutAttr: {
+            charge: -320,
+            linkDistance: 100 //! should be able to use this to describe how 
+            // many times they have retweeted the person or something
+        },
+        nodeStyle: {
+            fill: function(d) {
+                return d3.interpolateSpectral(2/Math.log10(d.data.num_status));
+            }
+        },
+        labelStyle: {
+            fill: 'black'
+        },
+        nodeAttr: {
+            r: function(d) {
+                if (d.data.num_followers==0) {
+                    return 0
                 }
-            },
-            labelStyle: {
-                fill: 'black'
-            },
-            nodeAttr: {
-                r: function(d) {
-                    if (d.data.num_followers==0) {
-                        return 0
-                    }
-                    else {
-                    return 2*Math.log(d.data.num_followers);
-                }}
-            },
-            //     title: function(d) { return d.label;}
-            // },
-    
-            // stickyDrag: true
-        }, true);
-    })
+                else {
+                return 2*Math.log(d.data.num_followers);
+            }}
+        },
+        //     title: function(d) { return d.label;}
+        // },
+
+        // stickyDrag: true
+    }, true);
+})
 
         //receive details from server
     socket.on('newfriend', function(msg) {
@@ -72,17 +72,17 @@ $(document).ready(function() {
     })
 
     socket.on('meData', function(msg) {
-        console.log("Hello, " msg.meData.username);
+        console.log("Hello!")// msg.meData.username, "!")
         // window.G.node.get("contrapoints").num_followers = msg.userdata.num_followers
         // window.G.node.get("contrapoints").num_status = msg.userdata.num_status
         // window.G.node.get("contrapoints").image = msg.userdata.image
     })
 
-    socket.on('userdata', function(msg) {
+    socket.on('targetdata', function(msg) {
         console.log("Updated target user info.");
-        window.G.node.get("contrapoints").num_followers = msg.userdata.num_followers
-        window.G.node.get("contrapoints").num_status = msg.userdata.num_status
-        window.G.node.get("contrapoints").image = msg.userdata.image
+        window.G.node.get("contrapoints").num_followers = msg.targetdata.num_followers
+        window.G.node.get("contrapoints").num_status = msg.targetdata.num_status
+        window.G.node.get("contrapoints").image = msg.targetdata.image
     })
 
     socket.on('newfollower', function(msg) {
