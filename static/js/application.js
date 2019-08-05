@@ -1,5 +1,6 @@
 var followers_received = [];
-var friends_received = [];
+var my_friends_received = new Set();
+var my_followers_received =  new Set();
 // var G = new jsnx.DiGraph();
 
 $.holdReady(true);
@@ -7,6 +8,10 @@ $.getScript("static/jsnetworkx/jsnetworkx.js", function() {
     window.G = new jsnx.DiGraph();
     $.holdReady(false);
 });
+
+$(document).on("load", function() {
+    $('a[rel=tipsy]').tipsy({fade: true, gravity: 'n'});
+  });
 
 $(document).ready(function() {
     //connect to the socket server.
@@ -22,12 +27,14 @@ $(document).ready(function() {
             });
 
         $("svg").attr({'height':'50em'})
-        
+
         jsnx.draw(G, {
             element: '#canvas',
             withLabels: true,
             layoutAttr: {
                 charge: -320,
+                linkDistance: 100 //! should be able to use this to describe how 
+                // many times they have retweeted the person or something
             },
             nodeStyle: {
                 fill: function(d) {
@@ -39,14 +46,12 @@ $(document).ready(function() {
             },
             nodeAttr: {
                 r: function(d) {
-                    // console.log("........")
-                    // console.log(d)
-                    // // console.log(d.data)
-                    // console.log(d.data.screen_name)
-                    // console.log(d.data.num_followers)
-                    // console.log(d.data.num_status)
+                    if (d.data.num_followers==0) {
+                        return 0
+                    }
+                    else {
                     return 2*Math.log(d.data.num_followers);
-                }
+                }}
             },
             //     title: function(d) { return d.label;}
             // },
@@ -58,20 +63,33 @@ $(document).ready(function() {
         //receive details from server
     socket.on('newfriend', function(msg) {
         console.log("Received friend " + msg.friend_id);
-        friends_received.push(msg.friend_id);
+        my_friends_received.add(msg.friend_id);
+    })
+
+    socket.on('newfollower', function(msg) {
+        console.log("Received follower " + msg.follower_id);
+        my_followers_received.add(msg.follower_id);
+    })
+
+    socket.on('meData', function(msg) {
+        console.log("Hello, " msg.meData.username);
+        // window.G.node.get("contrapoints").num_followers = msg.userdata.num_followers
+        // window.G.node.get("contrapoints").num_status = msg.userdata.num_status
+        // window.G.node.get("contrapoints").image = msg.userdata.image
     })
 
     socket.on('userdata', function(msg) {
         console.log("Updated target user info.");
         window.G.node.get("contrapoints").num_followers = msg.userdata.num_followers
         window.G.node.get("contrapoints").num_status = msg.userdata.num_status
+        window.G.node.get("contrapoints").image = msg.userdata.image
     })
 
     socket.on('newfollower', function(msg) {
         console.log("Received follower " + msg.follower.screen_name);
         if (
-            (typeof msg.follower.screen_name != "undefined")||
-        (typeof msg.follower.num_followers != "undefined")||
+            (typeof msg.follower.screen_name != "undefined")&&
+        (typeof msg.follower.num_followers != "undefined")&&
         !isNaN(msg.follower.num_followers)
             ) {
             followers_received.push(msg.follower);
@@ -83,7 +101,9 @@ $(document).ready(function() {
 
 function AddFollowers(G) {
     for (var i = 0; i < followers_received.length; i++) {
-        if (!G.nodes().includes(followers_received[i])) {
+        if (!G.nodes().includes(followers_received[i]) && G.nodes().length<=101) {
+            // ie, if the new person isn't already a node and also there are 100 or fewer
+            // extant nodes + the core/target account
             if (
                 (typeof followers_received[i]["screen_name"] != "undefined")&&
                 (typeof followers_received[i]["num_followers"] != "undefined")&&

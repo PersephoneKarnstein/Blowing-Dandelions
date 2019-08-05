@@ -8,6 +8,7 @@ from random import random
 from time import sleep
 from threading import Thread, Event
 from collections import deque
+from datetime import datetime as dt
 import os, tweepy
 
 API_KEY = os.environ['API_KEY']
@@ -25,6 +26,7 @@ api = tweepy.API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True, 
 
 
 target_user = 'contrapoints' #! change to actual target user
+me_user = 'thesaoirsekay'
 
 #####################################################
 ################## THREADING SET-UP #################
@@ -51,8 +53,10 @@ friend_send_thread_stop_event = Event()
 
 #initialize a queue to add things into
 FOLLOWER_QUEUE = deque()
-FRIEND_QUEUE = deque()
-USER_DATA = {"username":target_user}
+MY_FRIEND_QUEUE = deque()
+MY_FOLLOWER_QUEUE = deque()
+TARGET_DATA = {"username":target_user}
+ME_DATA = {"username":me_user}
 
 
 #####################################################
@@ -75,13 +79,15 @@ class FollowerThread(Thread):
 
         # print("Let's heckin do this.")
 
-        global auth, api, FOLLOWER_QUEUE, USER_DATA
+        global auth, api, FOLLOWER_QUEUE, TARGET_DATA
        
         u = api.get_user(screen_name = self.screenname)
         num_followers = u.followers_count
         num_status = u.statuses_count
-        USER_DATA["num_followers"] = num_followers
-        USER_DATA["num_status"] = num_status
+        profile_image_url = u.profile_image_url
+        TARGET_DATA["num_followers"] = num_followers
+        TARGET_DATA["num_status"] = num_status
+        TARGET_DATA["image"] = profile_image_url
         all_followers = dict()
         i = 0
 
@@ -109,32 +115,50 @@ class FriendThread(Thread):
 
     def GetFriends(self):
         """
-        Because the Twitter API will time out very quickly for targets with large
+        Because the Twitter API will time out very quickly for users with large
         'friend' groups but can be configured to just wait out the rate limit rather
         than throwing an error, we here capture the friend data as it is received
         and add it to a queue that can be pulled from to send to the frontend.
         """
 
-        global auth, api, FRIEND_QUEUE, USER_DATA
+        global auth, api, MY_FRIEND_QUEUE, MY_FOLLOWER_QUEUE, ME_DATA
        
         u = api.me()
         num_friends = u.friends_count
-        # USER_DATA["num_friends"] = num_friends
-        all_friends = []
-        j = 0
+        num_followers = u.followers_count
+        ME_DATA["num_friends"] = num_friends
+        ME_DATA["num_followers"] = num_followers
+        got_friends = 0
 
-        while not follower_thread_stop_event.isSet():
+        while True:#not follower_thread_stop_event.isSet():
             for friend in tweepy.Cursor(api.friends, id=u.id_str).items():
                 # got_follower = {"query_screenname":self.screenname,"id":follower.id_str, "screen_name":follower.screen_name, \
                 #     "location":follower.location,"num_followers":follower.followers_count, "num_status":follower.statuses_count,\
                 #         "is_verified":follower.verified, "image":follower.profile_image_url}
-                all_friends.append(friend.id_str)
-                j+=1
+                got_friends+=1
 
-                FRIEND_QUEUE.appendleft(friend.id_str) #! enqueue followers in this thread; dequeue in a seperate thread
-                print(f"j={j}\nfriend queue length={len(FRIEND_QUEUE)}\n{friend.screen_name}\n\n")
+                MY_FRIEND_QUEUE.appendleft(friend.id_str) #! enqueue followers in this thread; dequeue in a seperate thread
+                print(f"j={got_friends}\nfriend queue length={len(MY_FRIEND_QUEUE)}\n{friend.screen_name}\n\n")
 
-            if j >= num_friends: follower_send_thread_stop_event.set()
+            if got_friends >= num_friends: break #follower_send_thread_stop_event.set()
+            else: continue
+
+        print("\n\nMoving on to your followers...\n\n")
+
+        while True:#not follower_thread_stop_event.isSet():
+            for follower in tweepy.Cursor(api.followers, id=u.id_str).items():
+                # got_follower = {"query_screenname":self.screenname,"id":follower.id_str, "screen_name":follower.screen_name, \
+                #     "location":follower.location,"num_followers":follower.followers_count, "num_status":follower.statuses_count,\
+                #         "is_verified":follower.verified, "image":follower.profile_image_url}
+                got_followers+=1
+
+                MY_FOLLOWER_QUEUE.appendleft(follower.id_str) #! enqueue followers in this thread; dequeue in a seperate thread
+                print(f"k={got_followers}\nfollower queue length={len(MY_FOLLOWER_QUEUE)}\n{follower.screen_name}\n\n")
+
+            if got_followers >= num_followers: break #follower_send_thread_stop_event.set()
+            else: continue
+
+        friend_thread_stop_event.set()
 
     def run(self):
         self.GetFriends()
@@ -166,6 +190,7 @@ class SenderThread_Follower(Thread):
 class SenderThread_Friend(Thread):
     def __init__(self):
         self.delay = 1.5
+        self.last_sent_data = dt.now()
         super(SenderThread_Friend, self).__init__()
 
     def SendData(self):
@@ -173,15 +198,29 @@ class SenderThread_Friend(Thread):
         Pull from the queue of friends and send them to the frontend.
         """
 
-        global FRIEND_QUEUE
+        global MY_FRIEND_QUEUE
 
-        while not friend_thread_stop_event.isSet():
-            if len(FRIEND_QUEUE) > 0:
-                friend = FRIEND_QUEUE.pop()
-                print(f"\n\nDequeued friend id:\n{friend}\nNum left in queue:{len(FRIEND_QUEUE)}")
+        while True:#not friend_send_thread_stop_event.isSet():
+            if len(MY_FRIEND_QUEUE) > 0:
+                friend = MY_FRIEND_QUEUE.pop()
+                print(f"\n\nDequeued friend id:\n{friend}\nNum left in queue:{len(MY_FRIEND_QUEUE)}")
                 socketio.emit('newfriend', {'friend_id': friend}, namespace='/test')
-            else: pass
-            sleep(self.delay)
+                self.last_sent_data = dt.now()
+
+            elif: len(MY_FOLLOWER_QUEUE) > 0:
+                follower = MY_FOLLOWER_QUEUE.pop()
+                print(f"\n\nDequeued follower id:\n{follower}\nNum left in queue:{len(MY_FOLLOWER_QUEUE)}")
+                socketio.emit('newfollower', {'follower_id': follower}, namespace='/test')
+                self.last_sent_data = dt.now()
+
+            elif (dt.now() - self.last_sent_data).seconds >= 2*15*60: #i.e., we've gone two timeout periods 
+                                                                        #without sending any new data to the frontend.
+                sleep(self.delay)
+                continue
+            else: 
+                break
+
+        friend_send_thread_stop_event.set()
 
     def run(self):
         self.SendData()
@@ -229,8 +268,16 @@ def test_connect():
         friend_send_thread.start()
 
     while True:
-        if list(USER_DATA.keys()) == ["username","num_followers","num_status"]:
-            socketio.emit('userdata', {'userdata': USER_DATA}, namespace='/test')
+        if list(ME_DATA.keys()) == ["username","num_friends"]:
+            socketio.emit('meData', {'meData': ME_DATA}, namespace='/test')
+            break
+        else: 
+            sleep(1)
+            continue
+
+    while True:
+        if list(TARGET_DATA.keys()) == ["username","num_followers","num_status", "image"]:
+            socketio.emit('userdata', {'userdata': TARGET_DATA}, namespace='/test')
             break
         else: 
             sleep(1)
